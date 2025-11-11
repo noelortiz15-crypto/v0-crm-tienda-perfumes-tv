@@ -55,8 +55,129 @@ export async function testMongoConnection(config: MongoConfig) {
   }
 }
 
-export async function exportSchemaToMongo() {
-  const mongoSchema = `// MongoDB Schema Export from Supabase
+const sqlSchema = `-- Supabase SQL Schema Export
+-- Generated on ${new Date().toISOString()}
+-- Import this file using: psql -f supabase-schema.sql
+
+-- Create profiles table (linked to auth.users)
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  email TEXT UNIQUE NOT NULL,
+  role TEXT DEFAULT 'user',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create suppliers table
+CREATE TABLE IF NOT EXISTS public.suppliers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_name TEXT NOT NULL,
+  description TEXT,
+  address TEXT,
+  contact_person TEXT,
+  email TEXT,
+  phone TEXT,
+  created_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create products table
+CREATE TABLE IF NOT EXISTS public.products (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  description TEXT,
+  brand TEXT NOT NULL,
+  price DECIMAL(10, 2) NOT NULL,
+  tier TEXT NOT NULL,
+  expiry_date DATE,
+  stock_quantity INTEGER DEFAULT 0,
+  supplier_id UUID NOT NULL REFERENCES public.suppliers(id) ON DELETE CASCADE,
+  created_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create customers table
+CREATE TABLE IF NOT EXISTS public.customers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  first_name TEXT NOT NULL,
+  last_name TEXT NOT NULL,
+  description TEXT,
+  email TEXT UNIQUE,
+  phone TEXT,
+  address TEXT,
+  birth_date DATE,
+  created_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create employees table
+CREATE TABLE IF NOT EXISTS public.employees (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  first_name TEXT NOT NULL,
+  last_name TEXT NOT NULL,
+  description TEXT,
+  email TEXT UNIQUE,
+  phone TEXT,
+  address TEXT,
+  birth_date DATE,
+  created_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create sales table
+CREATE TABLE IF NOT EXISTS public.sales (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id UUID NOT NULL REFERENCES public.customers(id) ON DELETE CASCADE,
+  employee_id UUID NOT NULL REFERENCES public.employees(id) ON DELETE CASCADE,
+  total_amount DECIMAL(10, 2) NOT NULL,
+  status TEXT DEFAULT 'completed',
+  created_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create sales_items table
+CREATE TABLE IF NOT EXISTS public.sales_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  sale_id UUID NOT NULL REFERENCES public.sales(id) ON DELETE CASCADE,
+  product_id UUID NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
+  quantity INTEGER NOT NULL,
+  unit_price DECIMAL(10, 2) NOT NULL,
+  subtotal DECIMAL(10, 2) NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Enable RLS
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.suppliers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.employees ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sales ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sales_items ENABLE ROW LEVEL SECURITY;
+
+-- Create indexes
+CREATE INDEX IF NOT EXISTS idx_suppliers_created_by ON public.suppliers(created_by);
+CREATE INDEX IF NOT EXISTS idx_products_created_by ON public.products(created_by);
+CREATE INDEX IF NOT EXISTS idx_products_supplier_id ON public.products(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_customers_created_by ON public.customers(created_by);
+CREATE INDEX IF NOT EXISTS idx_employees_created_by ON public.employees(created_by);
+CREATE INDEX IF NOT EXISTS idx_sales_created_by ON public.sales(created_by);
+CREATE INDEX IF NOT EXISTS idx_sales_customer_id ON public.sales(customer_id);
+CREATE INDEX IF NOT EXISTS idx_sales_employee_id ON public.sales(employee_id);
+CREATE INDEX IF NOT EXISTS idx_sales_items_sale_id ON public.sales_items(sale_id);
+CREATE INDEX IF NOT EXISTS idx_sales_items_product_id ON public.sales_items(product_id);
+`
+
+export async function exportSupabaseSchema() {
+  return { schema: sqlSchema }
+}
+
+const mongoSchema = `// MongoDB Schema Export from Supabase
 // Generated on ${new Date().toISOString()}
 // Import this file using: mongosh < mongodb-schema.js
 
@@ -169,7 +290,7 @@ db.createCollection("employees", {
   }
 });
 
-// Sales Collection
+// Sales Collection (embedded sales_items)
 db.createCollection("sales", {
   validator: {
     $jsonSchema: {
@@ -201,7 +322,7 @@ db.createCollection("sales", {
   }
 });
 
-// Create indexes for better performance
+// Create indexes for performance
 db.suppliers.createIndex({ "createdBy": 1 });
 db.suppliers.createIndex({ "companyName": 1 });
 
@@ -223,9 +344,10 @@ db.sales.createIndex({ "status": 1 });
 db.sales.createIndex({ "createdAt": -1 });
 
 print("MongoDB schema created successfully!");
-print("Collections created: profiles, suppliers, products, customers, employees, sales");
+print("Collections: profiles, suppliers, products, customers, employees, sales");
 print("Indexes created for optimized queries");
 `
 
+export async function exportSchemaToMongo() {
   return { schema: mongoSchema }
 }

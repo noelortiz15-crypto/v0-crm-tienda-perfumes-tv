@@ -7,8 +7,15 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Database, Download, CheckCircle, XCircle } from "lucide-react"
-import { testMongoConnection, saveMongoConfig, getMongoConfig, exportSchemaToMongo } from "@/app/actions/settings"
+import { Database, Download, CheckCircle, XCircle, Copy, FileCode } from "lucide-react"
+import {
+  testMongoConnection,
+  saveMongoConfig,
+  getMongoConfig,
+  exportSchemaToMongo,
+  exportSupabaseSchema,
+} from "@/app/actions/settings"
+import { generateAllConnectionStrings } from "@/lib/db/connection-strings"
 
 export function DatabaseSettings() {
   const [mongoConfig, setMongoConfig] = useState({
@@ -21,9 +28,14 @@ export function DatabaseSettings() {
   const [statusMessage, setStatusMessage] = useState("")
   const [isSaving, setIsSaving] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  const [connectionStrings, setConnectionStrings] = useState<{ supabase: string; mongodb: string }>({
+    supabase: "",
+    mongodb: "",
+  })
 
   useEffect(() => {
     loadMongoConfig()
+    loadConnectionStrings()
   }, [])
 
   const loadMongoConfig = async () => {
@@ -31,6 +43,11 @@ export function DatabaseSettings() {
     if (config) {
       setMongoConfig(config)
     }
+  }
+
+  const loadConnectionStrings = async () => {
+    const strings = await generateAllConnectionStrings()
+    setConnectionStrings(strings)
   }
 
   const handleTestConnection = async () => {
@@ -57,6 +74,7 @@ export function DatabaseSettings() {
     try {
       await saveMongoConfig(mongoConfig)
       setStatusMessage("Configuration saved successfully!")
+      loadConnectionStrings()
       setTimeout(() => setStatusMessage(""), 3000)
     } catch (error) {
       setStatusMessage("Failed to save configuration")
@@ -80,7 +98,7 @@ export function DatabaseSettings() {
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
 
-      setStatusMessage("Schema exported successfully!")
+      setStatusMessage("MongoDB schema exported successfully!")
       setTimeout(() => setStatusMessage(""), 3000)
     } catch (error) {
       setStatusMessage("Failed to export schema")
@@ -89,8 +107,80 @@ export function DatabaseSettings() {
     }
   }
 
+  const handleExportSupabaseSchema = async () => {
+    setIsExporting(true)
+    try {
+      const result = await exportSupabaseSchema()
+
+      const blob = new Blob([result.schema], { type: "text/plain" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = "supabase-schema.sql"
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+
+      setStatusMessage("Supabase schema exported successfully!")
+      setTimeout(() => setStatusMessage(""), 3000)
+    } catch (error) {
+      setStatusMessage("Failed to export schema")
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text)
+    setStatusMessage("Connection string copied to clipboard!")
+    setTimeout(() => setStatusMessage(""), 2000)
+  }
+
   return (
     <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileCode className="w-5 h-5" />
+            Connection Strings
+          </CardTitle>
+          <CardDescription>Database connection strings for external access</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Supabase Connection String</Label>
+            <div className="flex gap-2">
+              <Input value={connectionStrings.supabase} readOnly className="font-mono text-xs bg-slate-50" />
+              <Button variant="outline" size="icon" onClick={() => copyToClipboard(connectionStrings.supabase)}>
+                <Copy className="w-4 h-4" />
+              </Button>
+            </div>
+            <p className="text-xs text-slate-500">PostgreSQL connection string for direct database access</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>MongoDB Connection String</Label>
+            <div className="flex gap-2">
+              <Input value={connectionStrings.mongodb} readOnly className="font-mono text-xs bg-slate-50" />
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => copyToClipboard(connectionStrings.mongodb)}
+                disabled={!connectionStrings.mongodb}
+              >
+                <Copy className="w-4 h-4" />
+              </Button>
+            </div>
+            <p className="text-xs text-slate-500">
+              {connectionStrings.mongodb
+                ? "MongoDB connection string from configuration"
+                : "Configure MongoDB below to generate connection string"}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -133,10 +223,22 @@ export function DatabaseSettings() {
                   </div>
                 </div>
 
-                <Button onClick={handleExportSchema} disabled={isExporting} className="w-full">
-                  <Download className="w-4 h-4 mr-2" />
-                  {isExporting ? "Exporting..." : "Export Schema to MongoDB Format"}
-                </Button>
+                <div className="flex flex-col gap-2">
+                  <Button
+                    onClick={handleExportSupabaseSchema}
+                    disabled={isExporting}
+                    variant="outline"
+                    className="w-full bg-transparent"
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    {isExporting ? "Exporting..." : "Export SQL Schema (.sql)"}
+                  </Button>
+
+                  <Button onClick={handleExportSchema} disabled={isExporting} className="w-full">
+                    <Download className="w-4 h-4 mr-2" />
+                    {isExporting ? "Exporting..." : "Export Schema to MongoDB Format"}
+                  </Button>
+                </div>
               </div>
             </TabsContent>
 
@@ -244,13 +346,15 @@ export function DatabaseSettings() {
         </CardHeader>
         <CardContent>
           <ol className="list-decimal list-inside space-y-2 text-sm text-slate-600">
-            <li>Export the schema using the button above</li>
+            <li>Export the Supabase SQL schema using the button above</li>
+            <li>Export the MongoDB schema using the button above</li>
             <li>Install MongoDB locally or use MongoDB Atlas</li>
-            <li>Run the exported schema script in MongoDB shell or Compass</li>
+            <li>Run the exported MongoDB schema script in MongoDB shell or Compass</li>
             <li>Export your data from Supabase (use pg_dump or Supabase dashboard)</li>
             <li>Import the data into MongoDB using mongoimport or custom scripts</li>
             <li>Configure the MongoDB connection in this settings page</li>
             <li>Test the connection to ensure everything works</li>
+            <li>Use the connection strings above in your external applications</li>
           </ol>
         </CardContent>
       </Card>

@@ -6,6 +6,7 @@ import { InventoryReport } from "./reports/inventory-report"
 import { CustomerReport } from "./reports/customer-report"
 import { SupplierReport } from "./reports/supplier-report"
 import { EmployeeReport } from "./reports/employee-report"
+import { TopCustomersReport } from "./reports/top-customers-report"
 
 interface Sale {
   id: string
@@ -42,21 +43,43 @@ interface Employee {
   created_at: string
 }
 
+interface TopCustomer {
+  customer: {
+    id: string
+    first_name: string
+    last_name: string
+    email: string
+  }
+  totalSales: number
+  orderCount: number
+}
+
 interface ReportsDashboardProps {
   sales: Sale[]
   products: Product[]
   customers: Customer[]
   suppliers: Supplier[]
   employees: Employee[]
+  topCustomers: TopCustomer[]
 }
 
-export function ReportsDashboard({ sales, products, customers, suppliers, employees }: ReportsDashboardProps) {
-  const [activeTab, setActiveTab] = useState<"sales" | "inventory" | "customers" | "suppliers" | "employees">("sales")
+export function ReportsDashboard({
+  sales,
+  products,
+  customers,
+  suppliers,
+  employees,
+  topCustomers,
+}: ReportsDashboardProps) {
+  const [activeTab, setActiveTab] = useState<
+    "sales" | "inventory" | "customers" | "suppliers" | "employees" | "top-customers"
+  >("sales")
 
   const tabs = [
     { id: "sales", label: "Sales", icon: "💰" },
     { id: "inventory", label: "Inventory", icon: "📦" },
     { id: "customers", label: "Customers", icon: "👥" },
+    { id: "top-customers", label: "Top Customers", icon: "⭐" },
     { id: "suppliers", label: "Suppliers", icon: "🏢" },
     { id: "employees", label: "Employees", icon: "👨‍💼" },
   ]
@@ -87,6 +110,7 @@ export function ReportsDashboard({ sales, products, customers, suppliers, employ
       {activeTab === "sales" && <SalesReport sales={sales} />}
       {activeTab === "inventory" && <InventoryReport products={products} />}
       {activeTab === "customers" && <CustomerReport customers={customers} />}
+      {activeTab === "top-customers" && <TopCustomersReport topCustomers={topCustomers} />}
       {activeTab === "suppliers" && <SupplierReport suppliers={suppliers} />}
       {activeTab === "employees" && <EmployeeReport employees={employees} />}
     </div>
